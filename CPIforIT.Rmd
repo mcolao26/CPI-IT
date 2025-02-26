@@ -1,0 +1,126 @@
+---
+title: "CPI for IT"
+author: "Matthew Colao"
+date: "2025-02-17"
+output: html_document
+---
+# Our Packages
+```{r,echo=TRUE, results='hide'}
+library(fpp)
+library(fpp2)
+library(TTR)
+library(gridExtra)
+```
+# Our Data #
+```{r}
+cpi <- read.csv("/Users/mattcolao/Downloads/cpi_it_nonseas.csv")
+head(cpi, 10)
+```
+# Converting to TS Object #
+```{r}
+cpi.ts<-ts(cpi[,2], start=c(2006,1), end=c(2025,1), frequency=12)
+ptheme <- theme(aspect.ratio = 2/3,text=element_text(size=10), 
+                axis.title = element_text(size=9))
+
+```
+# Examining with PLot and ACF
+```{r}
+# Attributes
+attributes(cpi.ts)
+
+# Plot
+autoplot(cpi.ts) + 
+  ylab("CPI for IT (Non-seasonally Adjusted)") +
+  xlab("Month and Year") +
+  ptheme +
+  ggtitle("CPI for IT(Non-seasonally Adjusted)")
+
+# ACF
+Acf(cpi.ts, lag.max = 70)
+```
+# Our Models #
+```{r}
+# Mean 
+mean_cpi <- meanf(cpi.ts,5)
+plot(mean_cpi)
+
+# Naive
+naive_cpi <- naive(cpi.ts,5)
+plot(naive_cpi)
+
+# Seasonal Naive
+snaive_cpi <- snaive(cpi.ts,5)
+plot(snaive_cpi)
+
+# Random Walk
+rw_cpi <- rwf(cpi.ts, 5, drift = TRUE)
+plot(rw_cpi)
+
+# Moving Averages
+ma5_cpi <- ma(cpi.ts, order = 5)
+ma5_cpi
+ma10_cpi <- ma(cpi.ts, order = 10)
+ma10_cpi
+```
+# Decomposition
+```{r}
+decomp_cpi <- stl(cpi.ts,s.window = 'periodic')
+attributes(decomp_cpi)
+plot(decomp_cpi)
+
+# Seasonally Adjust
+sadj_cpi <- seasadj(decomp_cpi)
+plot(sadj_cpi)
+```
+# Holt Winters
+```{r}
+hw_cpi <- HoltWinters(cpi.ts)
+plot(hw_cpi)
+```
+# Forecast
+```{r}
+# Using Decomposition
+# 1. Compare to Graph
+plot(cpi.ts)
+lines(sadj_cpi,col='red')
+
+# Forecast
+forecast_decomp_cpi <- forecast(decomp_cpi)
+plot(forecast_decomp_cpi)
+
+# Using Holt Winters
+forecast_cpi_new <-forecast(hw_cpi, h = 10)
+plot(forecast_cpi_new)
+accuracy(forecast_cpi_new)
+```
+#Combine into One Chart
+```{r}
+plot(mean_cpi)
+lines(naive_cpi$mean,col='green')
+lines(snaive_cpi$mean,col='red')
+lines(rw_cpi$mean,col= 'pink')
+lines(ma5_cpi,col='orange')
+lines(ma10_cpi,col='purple')
+lines(sadj_cpi,col='brown')
+```
+# Accuracy 
+```{r}
+#Naive Model
+accuracy(naive_cpi)
+
+# Seasonal Naive Model
+accuracy(snaive_cpi)
+
+# Mean Model
+accuracy(mean_cpi)
+
+# Random Walk Model
+accuracy(rw_cpi)
+
+# Decomposition Model
+accuracy(forecast_decomp_cpi)
+
+# Holt Winters Model
+accuracy(forecast_cpi_new)
+```
+
