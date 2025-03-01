@@ -1,0 +1,170 @@
+---
+title: "Consumer Price Index for All Urban Consumers: Information Technology, Hardware and Services in U.S. City Average"
+author: "Matthew Colao"
+date: "2025-02-17"
+output: html_document
+---
+Overview of Dataset: 
+  
+The dataset is stored as cpi_it_nonseas.csv and contains non-seasonally adjusted monthly time series data.
+It includes 229 observations covering consumer price index (CPI), tracking the price changes of IT-related goods and services over time from 1988 to 2025.
+
+Sections of Project:  
+1. Our Packages.   
+2. Loading and Examining.   
+3. Creating the Models.   
+4. Running Forecasts.   
+5. Accuracy Measures.   
+6. Conclusion. 
+
+# 1. Our Packages
+```{r, message=FALSE}
+library(fpp)
+library(fpp2)
+library(TTR)
+library(gridExtra)
+
+```
+
+# 2. Loading and Examining 
+```{r}
+# Our Data & Heads + Tails
+cpi <- read.csv("/Users/mattcolao/Downloads/cpi_it_nonseas.csv")
+head(cpi, 10)
+tail(cpi, 10)
+
+# Converting to TS Object
+cpi.ts<-ts(cpi[,2], start=c(1988,12), end=c(2025,1), frequency=12)
+ptheme <- theme(aspect.ratio = 2/3,text=element_text(size=10), 
+                axis.title = element_text(size=9))
+
+# Our Data's Attributes
+attributes(cpi.ts)
+
+# Examining the Plot of Our Data
+autoplot(cpi.ts) + 
+  ylab("CPI for IT (Non-seasonally Adjusted)") +
+  xlab("Month and Year") +
+  ptheme +
+  ggtitle("CPI for IT(Non-seasonally Adjusted)")
+```
+```{r}
+# Acf of Our Data
+Acf(cpi.ts, lag.max = 120)
+# After Lag 108 the points become insignificant. Those points after won't be included for further analysis.
+```
+
+```{r}
+# New Plot of Significant Points
+plot(tail(cpi.ts,108), type = 'l')
+
+# New Time Series Object(Start 2016)
+cpi.ts <- window(cpi.ts, start=c(2016,1))
+
+# Plotting New Time Series
+autoplot(cpi.ts) + 
+  ylab("CPI for IT (Non-seasonally Adjusted)") +
+  xlab("Month and Year") +
+  ptheme +
+  ggtitle("CPI for IT(Non-seasonally Adjusted)")
+```
+
+# 3. Creating the Models 
+```{r}
+# Mean 
+mean_cpi <- meanf(cpi.ts,5)
+plot(mean_cpi) 
+# Probably not the best model, as it doesn't take into account trend and seasonality as well as the fact the values are always decreasing and show no volatility, meaning the mean value will not be accurate in the slightest. Very large confidence band.
+
+# Naive
+naive_cpi <- naive(cpi.ts,5)
+plot(naive_cpi)
+# This model assumes the most recent CPI value will remain unchanged for future periods, resulting in a flat forecast line with increasing uncertainty, however not as bad as the mean forecast.
+
+# Seasonal Naive
+snaive_cpi <- snaive(cpi.ts,5)
+plot(snaive_cpi)
+# Model does not say much. Just assumes that future CPI values will follow the same seasonal pattern as the corresponding periods from the previous year. 
+
+# Random Walk
+rw_cpi <- rwf(cpi.ts, 5, drift = TRUE)
+plot(rw_cpi)
+#The plot predicts that future values will follow the past trend with some uncertainty, as shown by the shaded confidence intervals.
+
+# Moving Averages
+ma5_cpi <- ma(cpi.ts, order = 5)
+ma5_cpi
+ma10_cpi <- ma(cpi.ts, order = 10)
+ma10_cpi
+```
+
+```{r}
+# Decompostion Model
+decomp_cpi <- stl(cpi.ts,s.window = 'periodic')
+attributes(decomp_cpi)
+plot(decomp_cpi)
+# Data shows declining trend. Seasonal shows a strong recurring seasonal pattern. Trend shows downward slope wih slight stability. Remainder shows an ideal set of random shocks affecting CPI.  
+
+# Seasonally Adjust
+sadj_cpi <- seasadj(decomp_cpi)
+plot(sadj_cpi)
+lines(cpi.ts, col='red')
+# After adjusting the plot shows that the long-term downward trend remains while short-term fluctuations are smoothed out.
+```
+
+```{r}
+# Holt Winters
+hw_cpi <- HoltWinters(cpi.ts)
+plot(hw_cpi) 
+# Very good model as it takes into account both seasonality and trend, tracking both well with only some fluctuations. Good for forecasting. 
+
+```
+
+# 4. Running Forecasts 
+```{r}
+# Using Seasonally Adjusted Decomposition
+forecast_seaCPI <- forecast(sadj_cpi)
+plot(forecast_seaCPI)
+#The plot shows gradual decline with some uncertainty in the shaded area. No seasonality involved. 
+
+# Using Holt Winters
+forecast_cpi_new <-forecast(hw_cpi, h = 10)
+plot(forecast_cpi_new)
+# The model expects CPI to keep decreasing. Since there are no clear seasonal patterns, the drop seems to be caused by long-term trends rather than repeating cycles. Looks more accurate than the previous model indicated by the small shaded area.
+```
+
+```{r}
+# Combine into One Chart
+plot(mean_cpi)
+lines(naive_cpi$mean,col='green')
+lines(snaive_cpi$mean,col='red')
+lines(rw_cpi$mean,col= 'pink')
+lines(ma5_cpi,col='orange')
+lines(ma10_cpi,col='purple')
+lines(sadj_cpi,col='brown')
+
+```
+
+# 5. Accuracy Measures 
+```{r}
+#Naive Model
+accuracy(naive_cpi)
+
+# Seasonal Naive Model
+accuracy(snaive_cpi)
+
+# Mean Model
+accuracy(mean_cpi)
+
+# Random Walk Model
+accuracy(rw_cpi)
+
+# Decomposition Model
+accuracy(forecast_seaCPI)
+
+# Holt Winters Model
+accuracy(forecast_cpi_new)
+```
+
+# 6. Conclusion
+The Decomposition Model performs the best overall, as it has the lowest RMSE, MAE, MAPE, and MASE, along with an ACF1 value close to 0, indicating well-behaved residuals and great accuracy. 
