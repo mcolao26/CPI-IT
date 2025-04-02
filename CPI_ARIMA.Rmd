@@ -1,0 +1,71 @@
+---
+title: "CPI_ARIMA"
+author: "Matthew Colao"
+date: "2025-04-02"
+output: html_document
+---
+
+# Overview - 
+Consumer Price Index for All Urban Consumers: Information Technology, Hardware and Services in U.S. City Average.  
+Ranges from December 1988 to February 2025.  
+Tracks the price change of IT related goods and services over time.   
+
+
+## Sections
+1. Our Libraries & Data.
+2. Perform ARIMA on your time series.   
+3. Explain the output.  
+4. Run Residual Analysis
+5. Perform and Plot the forecast for the next five periods
+6. Show the accuracy of your ARIMA model
+
+# Our Libraries & Data
+```{r, message=FALSE}
+library(fpp)
+library(fpp2)
+library(forecast)
+
+cpi_it <- read.csv("/Users/mattcolao/Downloads/CPI_feb_nonseasonal.csv")
+cpi_ts <- ts(cpi_it[,2], start=c(1988,12), frequency = 12)
+```
+
+# Perform ARIMA on your time series. 
+```{r}
+# Number for seasonal stationary time series
+nsdiffs(cpi_ts)
+# Number for stationary time series
+ndiffs(cpi_ts)
+
+# Acf, Pacf, and plot with differencing of 2
+cpi_ts_diff2 <- diff(cpi_ts, differences = 2)
+tsdisplay(cpi_ts_diff2)
+
+
+arima_cpi <- auto.arima(cpi_ts, trace = TRUE, stepwise = FALSE, seasonal = TRUE)
+arima_cpi
+```
+
+# Explain the Output.  
+
+ARIMA(2,2,1) is the nonseasonal component that has 2 AR terms and 1 MA term. All the coefficients for it are in reasonable range. ARIMA(2,0,0) is the seasonal component that has 2 AR terms and 0 for the rest. The coefficients are also in a reasonable range. Sigma^2 is also reasonable so we can move to the analyzing the residuals.
+
+# Run Residual Analysis
+```{r}
+checkresiduals(arima_cpi)
+tsdiag(arima_cpi,gof.lag = 10)
+shapiro.test(residuals(arima_cpi))
+```
+The residuals conclude that the model fails to capture some aspects of the data, as seen by the Acf with spikes outside of the band of significance and also further proven by the Ljung-Box test and the Shapiro-Wilk test. The Ljung-Box test has too low a p-value, meaning there is autocorellation present in the residuals. The Shapiro-Wilk test also has a very low p-value, meaning the residuals are not normally distributed as they should be. More tweaking and modifying of the ARIMA model or the date itself is needed. 
+
+# Perform and Plot the forecast for the next five periods
+```{r}
+forecast_arima <- forecast(arima_cpi, h=5)
+plot(forecast_arima)
+forecast_arima
+```
+
+# Show the accuracy of your ARIMA model
+```{r}
+accuracy(forecast_arima)
+```
+The model performs better than the baseline naive model and captures most of the autocorrelation. However, it could be made more accurate. 
