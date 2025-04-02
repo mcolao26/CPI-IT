@@ -2,7 +2,7 @@
 
 1. The Dataset
 
-The dataset is stored as CUSR0000SEEE.csv and contains monthly time series data.  
+The dataset is stored as CUSR0000SEEE.csv or CPI_feb_nonseasonal and contains monthly time series data.  
 It includes 229 observations covering consumer price index (CPI), tracking the price changes of IT-related goods and services over time.  
      
 2. Detailed Description of Dataset
