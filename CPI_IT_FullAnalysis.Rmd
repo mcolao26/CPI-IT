@@ -1,0 +1,419 @@
+---
+title: "Consumer Price Index for All Urban Consumers: Information Technology, Hardware
+  and Services in U.S. City Average - Full Analysis"
+author: "Matthew Colao"
+date: "2025-04-06"
+output: html_document
+---
+## Sections
+1. Our Libraries & Data.
+2. Exploratory Data Analysis   
+3. Models and Residual Analysis 
+4. Choose Best Model(s)
+5. Forecast 
+6. Conclusion
+
+# Our Libraries and Data
+```{r}
+library(fpp)
+library(fpp2)
+library(forecast)
+
+cpi_it <- read.csv("/Users/mattcolao/Downloads/CPI_feb_nonseasonal.csv")
+cpi_ts <- ts(cpi_it[,2], start=c(1988,12), frequency = 12)
+
+sum(is.na(cpi_it))
+anyDuplicated(cpi_it)
+boxplot(cpi_ts)
+summary(cpi_ts)
+```
+
+# Exploratory Data Analysis
+```{r}
+# Plot
+plot(cpi_ts, 
+     main = "Consumer Price Index (CPI) Over Time", 
+     xlab = "Year", 
+     ylab = "CPI", 
+     col = "steelblue", 
+     lwd = 2)
+
+# Acf
+Acf(cpi_ts, 
+    lag.max = 200, 
+    main = "Autocorrelation Function of CPI Time Series")
+
+# Decomposition Plot
+decomp_cpi <- stl(cpi_ts, s.window ='periodic')
+plot(decomp_cpi, 
+     main = "STL Decomposition of CPI Time Series")
+
+# Additive or Seasonal
+a_o_m <- decompose(cpi_ts)
+a_o_m$type
+
+# Seasonally Adjust
+seas_cpi_decomp <- seasadj(decomp_cpi)
+plot(seas_cpi_decomp,
+     main = "Seasonally Adjusted CPI vs Original CPI",
+     ylab = "CPI",
+     xlab = "Year",
+     col = "blue",
+     lwd = 2)
+lines(cpi_ts, col = "red", lwd = 1.5, lty = 2)
+legend("topright",
+       legend = c("Seasonally Adjusted", "Original"),
+       col = c("blue", "red"),
+       lty = c(1, 2),
+       lwd = c(2, 1.5),
+       bty = "n")
+
+cpi_ts <- window(cpi_ts, start = c(2009, 1))
+```
+
+# Models and Residual Analysis 
+```{r }
+# Naive
+naive_cpi <- naive(cpi_ts)
+res_naive_cpi <- residuals(naive_cpi)
+plot(res_naive_cpi,
+     main = "Residuals of Naive Model for CPI",
+     ylab = "Residuals",
+     xlab = "Time",
+     col = "darkgray",
+     lwd = 1.5)
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+grid() 
+
+fitted_naive <- as.numeric(fitted(naive_cpi))
+residuals_naive <- as.numeric(residuals(naive_cpi))
+
+# Plot residuals vs fitted values
+df_naive <- na.omit(data.frame(
+  fitted = as.numeric(fitted(naive_cpi)),
+  resid  = as.numeric(residuals(naive_cpi))
+))
+plot(df_naive$fitted, df_naive$resid,
+     main = "Residuals vs Fitted (Naive)", xlab = "Fitted", ylab = "Residuals",
+     pch = 16)
+
+checkresiduals(naive_cpi)
+shapiro.test(residuals(naive_cpi))
+
+
+# Simple Moving Averages
+ma3_cpi <- ma(cpi_ts, order = 3)
+ma6_cpi <- ma(cpi_ts, order = 6)
+ma9_cpi <- ma(cpi_ts, order = 9)
+plot(cpi_ts, 
+     main = "CPI with Simple Moving Averages (3, 6, 9)", 
+     ylab = "CPI", 
+     xlab = "Time", 
+     col = "black", 
+     lwd = 2)
+lines(ma3_cpi, col = "red", lwd = 2)
+lines(ma6_cpi, col = "blue", lwd = 2)
+lines(ma9_cpi, col = "darkgreen", lwd = 2)
+legend("topright", 
+       legend = c("Original CPI", "MA(3)", "MA(6)", "MA(9)"),
+       col = c("black", "red", "blue", "darkgreen"),
+       lty = 1, 
+       lwd = 2,
+       bty = "n")
+grid()
+
+ma3_forecast_cpi <- forecast(na.omit(ma3_cpi), h=5)
+ma3_trailing <- stats::filter(cpi_ts, rep(1/3, 3), sides = 1)
+
+# Forecast from trailing MA (omit initial NAs)
+ma3_forecast_cpi <- forecast(na.omit(ma3_trailing), h = 5)
+
+# Plot forecast
+autoplot(ma3_forecast_cpi) +
+  labs(title = "Forecast from Trailing MA(3)",
+       x = "Time", y = "CPI") +
+  theme_minimal()
+
+res_ma3 <- na.omit(cpi_ts - ma3_cpi)
+res_ma6 <- na.omit(cpi_ts - ma6_cpi)
+res_ma9 <- na.omit(cpi_ts - ma9_cpi)
+
+rmse_ma3 <- sqrt(mean(res_ma3^2))
+rmse_ma6 <- sqrt(mean(res_ma6^2))
+rmse_ma9 <- sqrt(mean(res_ma9^2))
+
+cat("RMSE:\nMA(3):", rmse_ma3, "\nMA(6):", rmse_ma6, "\nMA(9):", rmse_ma9, "\n")
+
+library(ggplot2)
+par(mfrow = c(3, 1), mar = c(4, 4, 2, 1))
+plot(res_ma3,
+     main = "Residuals from MA(3) Model",
+     ylab = "Residuals",
+     xlab = "Time",
+     col = "darkgray",
+     lwd = 1.5)
+abline(h = 0, col = "red", lty = 2)
+grid()
+
+Acf(res_ma3,
+    main = "ACF of MA(3) Residuals")
+hist(res_ma3,
+     main = "Histogram of MA(3) Residuals",
+     xlab = "Residuals",
+     col = "lightblue",
+     border = "white")
+abline(v = mean(res_ma3), col = "red", lwd = 2, lty = 2)
+
+par(mfrow = c(1, 1))
+shapiro.test(res_ma3)
+
+# Exponential Smoothing
+ets_cpi <- ets(cpi_ts)
+ets_forecast_cpi <- forecast(ets_cpi, h =5)
+plot(ets_cpi)
+coef(ets_cpi)
+checkresiduals(ets_cpi)
+sqrt(ets_cpi$sigma2)
+
+fitted_vals <- as.numeric(fitted(ets_cpi))
+residual_vals <- as.numeric(residuals(ets_cpi))
+
+# Plot
+df_ets <- na.omit(data.frame(
+  fitted = as.numeric(fitted(ets_cpi)),
+  resid  = as.numeric(residuals(ets_cpi))
+))
+plot(df_ets$fitted, df_ets$resid,
+     main = "Residuals vs Fitted (ETS)", xlab = "Fitted", ylab = "Residuals",
+     pch = 16)
+
+# Holt-Winters
+hw_cpi <- HoltWinters(cpi_ts)
+hw_forecast_cpi <- forecast(hw_cpi, h = 5)
+hw_cpi$alpha
+hw_cpi$beta
+hw_cpi$gamma
+hw_cpi$coefficients
+sqrt(hw_cpi$SSE/length(cpi_ts))
+
+rmse <- sqrt(hw_cpi$SSE / length(cpi_ts))
+hw_summary <- rbind(
+  Alpha               = round(hw_cpi$alpha, 4),
+  Beta                = round(hw_cpi$beta, 4),
+  Gamma               = round(hw_cpi$gamma, 4),
+  Level_a             = round(hw_cpi$coefficients["a"], 4),
+  Trend_b             = round(hw_cpi$coefficients["b"], 4),
+  Seasonality_s1      = round(hw_cpi$coefficients["s1"], 4),  # Add more s2, s3 if seasonal
+  RMSE                = round(rmse, 4)
+)
+print(hw_summary)
+
+fitted_vals <- as.numeric(fitted(hw_cpi))
+residual_vals <- as.numeric(residuals(hw_cpi))
+
+# Plot
+df_hw <- na.omit(data.frame(
+  fitted = as.numeric(fitted(hw_cpi)),
+  resid  = as.numeric(residuals(hw_cpi))
+))
+plot(df_hw$fitted, df_hw$resid,
+     main = "Residuals vs Fitted (HW)", xlab = "Fitted", ylab = "Residuals",
+     pch = 16)
+
+# Fit the HoltWinters model
+hw_cpi <- HoltWinters(cpi_ts)
+
+# Extract time points corresponding to the fitted values.
+# Note: HoltWinters only provides fitted values for a subset of the data.
+fitted_time <- time(hw_cpi$fitted)
+
+# Extract the actual values for the period covered by the fitted values.
+actual_values <- window(cpi_ts, start = fitted_time[1])
+
+# Extract fitted values and residuals from the model object.
+fitted_values <- hw_cpi$fitted[, "xhat"]
+residuals_hw <- residuals(hw_cpi)
+
+# Create a data frame with the required columns.
+df <- data.frame(
+  time = fitted_time,
+  actual = as.numeric(actual_values),
+  fitted = as.numeric(fitted_values),
+  residuals = as.numeric(residuals_hw)
+)
+
+# Load required libraries for plotting.
+library(ggplot2)
+library(gridExtra)
+
+# Plot 1: Fitted Values vs Residuals
+p1 <- ggplot(df, aes(x = fitted, y = residuals)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Fitted vs Residuals", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+# Plot 2: Actual Values vs Residuals
+p2 <- ggplot(df, aes(x = actual, y = residuals)) +
+  geom_point(color = "darkgreen", alpha = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs Actual Values", x = "Actual Values", y = "Residuals") +
+  theme_minimal()
+
+# Combine the two plots side by side.
+grid.arrange(p1, p2, ncol = 2)
+
+checkresiduals(hw_cpi)
+
+# ARIMA
+nsdiffs(cpi_ts)
+ndiffs(cpi_ts)
+
+# Acf, Pacf, and plot with differencing of 2
+cpi_ts_diff2 <- diff(cpi_ts, differences = 2)
+
+par(mfrow = c(3, 1), mar = c(4, 4, 2, 1))
+plot(cpi_ts_diff2,
+     main = "Second-Order Differenced CPI Time Series",
+     ylab = "Differenced CPI",
+     xlab = "Time",
+     col = "steelblue",
+     lwd = 2)
+grid()
+Acf(cpi_ts_diff2,
+    main = "ACF of Differenced CPI")
+Pacf(cpi_ts_diff2,
+     main = "PACF of Differenced CPI")
+par(mfrow = c(1, 1))
+
+
+arima_cpi <- auto.arima(cpi_ts, trace = TRUE, stepwise = FALSE, seasonal = TRUE)
+arima_cpi
+
+fitted_vals_arima <- as.numeric(fitted(arima_cpi))
+residual_vals_arima <- as.numeric(residuals(arima_cpi))
+
+plot(fitted_vals_arima, residual_vals_arima,
+     main = "Fitted vs Residuals Values (ARIMA Model)",
+     xlab = "Fitted Values",
+     ylab = "Residuals",
+     col = "darkblue",
+     pch = 16,
+     cex = 1.2)
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+grid()
+
+checkresiduals(arima_cpi)
+tsdiag(arima_cpi,gof.lag = 10)
+shapiro.test(residuals(arima_cpi))
+```
+
+# Forecast
+```{r}
+forecast_arima <- forecast(arima_cpi, h=5)
+autoplot(forecast_arima) +
+  labs(
+    title = "5-Step Ahead Forecast for ARIMA Model",
+    x = "Time",
+    y = "CPI"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+forecast_arima
+accuracy(forecast_arima)
+
+model_211_100 <- Arima(cpi_ts, order = c(2,1,1),
+                       seasonal = list(order = c(1,0,0), period = 12))
+model_221_101 <- Arima(cpi_ts, order = c(2,2,1),
+                       seasonal = list(order = c(1,0,1), period = 12))
+fc_211_100 <- forecast(model_211_100, h = 5)
+fc_221_101 <- forecast(model_221_101, h = 5)
+
+accuracy(fc_211_100)
+accuracy(fc_221_101)
+
+
+acc_211_100 <- accuracy(fc_211_100)
+acc_221_101 <- accuracy(fc_221_101)
+acc_model1 <- as.data.frame(t(acc_211_100))
+acc_model2 <- as.data.frame(t(acc_221_101))
+acc_model1$Metric <- rownames(acc_model1)
+acc_model2$Metric <- rownames(acc_model2)
+acc_model1 <- acc_model1[, c("Metric", setdiff(names(acc_model1), "Metric"))]
+acc_model2 <- acc_model2[, c("Metric", setdiff(names(acc_model2), "Metric"))]
+cat("Accuracy measures for ARIMA(2,1,1)(1,0,0)[12]:\n")
+print(acc_model1)
+cat("\nAccuracy measures for ARIMA(2,2,1)(1,0,1)[12]:\n")
+print(acc_model2)
+
+acc_forecast_arima <- accuracy(forecast_arima)
+acc_original <- as.data.frame(t(acc_forecast_arima))
+acc_original$Metric <- rownames(acc_original)
+acc_original <- acc_original[, c("Metric", setdiff(names(acc_original), "Metric"))]
+cat("Accuracy measures for the original model (forecast_cpi):\n")
+print(acc_original)
+
+
+autoplot(fc_221_101) +
+  labs(
+    title = "Forecast from ARIMA(2,2,1)(1,0,1)[12]",
+    x = "Time",
+    y = "CPI"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title = element_text(size = 12)
+  )
+
+fc_221_101
+forecast_errors <- fc_221_101$residuals
+
+# Create histogram and density plot
+ggplot(data.frame(error = forecast_errors), aes(x = error)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "lightblue", color = "black") +
+  geom_density(color = "red", size = 1) +
+  labs(title = "Histogram and Density Plot of Forecast Errors",
+       x = "Errors", y = "Density") +
+  theme_minimal()
+
+
+# MOVING AVG FORECAST
+autoplot(ma3_forecast_cpi) +
+  labs(title = "3-Period Moving Average Forecast - CPI",
+       x = "Time", y = "CPI") +
+  theme_minimal()
+ma3_forecast_cpi
+
+errors_ma3 <- ma3_forecast_cpi$residuals
+ggplot(data.frame(error = errors_ma3), aes(x = error)) +
+  geom_histogram(aes(y = ..density..), bins = 20, fill = "lightblue", color = "black") +
+  geom_density(color = "red", size = 1) +
+  labs(title = "Histogram and Density of Forecast Errors (MA 3)",
+       x = "Forecast Error", y = "Density") +
+  theme_minimal()
+library(knitr)
+acc_ma3 <- accuracy(ma3_forecast_cpi)
+kable(acc_ma3[1, ], caption = "Accuracy Metrics: MA(3) Forecast")
+accuracy(ma3_forecast_cpi)
+acc_ma3
+
+acc_naive <- accuracy(naive_cpi)
+acc_ma3   <- accuracy(ma3_forecast_cpi)
+acc_ets   <- accuracy(ets_forecast_cpi)
+acc_hw    <- accuracy(hw_forecast_cpi)
+acc_arima <- accuracy(fc_221_101)
+
+# Combine the in-sample accuracy results
+accuracy_table <- rbind(
+  "Naive"                  = acc_naive[1, ],
+  "Moving Avg 3"           = acc_ma3[1, ],
+  "Exponential Smoothing" = acc_ets[1, ],
+  "Holt-Winters"           = acc_hw[1, ],
+  "Adj ARIMA(2,2,1)(1,0,1)[12]" = acc_arima[1, ]
+)
+library(knitr)
+kable(accuracy_table, caption = "Forecast Accuracy Comparison")
+accuracy_table
+```
+
